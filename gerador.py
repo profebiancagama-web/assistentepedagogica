@@ -1,14 +1,3 @@
-import os, sys, subprocess
-def instalar_pacotes_a_forca():
-    for pacote in ["python-docx", "pypdf", "google-genai", "supabase"]:
-        try:
-            __import__(pacote.replace("-", "_"))
-        except ImportError:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", pacote])
-
-instalar_pacotes_a_forca()
-
-# --- AGORA O CÓDIGO DO SISTEMA SEGUE NORMALMENTE ---
 import streamlit as st
 from docx import Document
 from docx.shared import Pt, RGBColor

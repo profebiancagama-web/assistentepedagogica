@@ -1,4 +1,3 @@
-# 🚀 INSTALADOR AUTOMÁTICO DE SEGURANÇA (FORÇANDO O SERVIDOR)
 import os, sys, subprocess
 def instalar_pacotes_a_forca():
     for pacote in ["python-docx", "pypdf", "google-genai", "supabase"]:

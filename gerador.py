@@ -1,4 +1,15 @@
-# Atualizacao do sistema
+# 🚀 INSTALADOR AUTOMÁTICO DE SEGURANÇA (FORÇANDO O SERVIDOR)
+import os, sys, subprocess
+def instalar_pacotes_a_forca():
+    for pacote in ["python-docx", "pypdf", "google-genai", "supabase"]:
+        try:
+            __import__(pacote.replace("-", "_"))
+        except ImportError:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", pacote])
+
+instalar_pacotes_a_forca()
+
+# --- AGORA O CÓDIGO DO SISTEMA SEGUE NORMALMENTE ---
 import streamlit as st
 from docx import Document
 from docx.shared import Pt, RGBColor
@@ -6,7 +17,7 @@ from google import genai
 from google.genai import types
 from pypdf import PdfReader
 from supabase import create_client, Client
-import io, os, re
+import io, re
 
 st.set_page_config(page_title="Gerador Olegário Pro", layout="wide")
 
@@ -20,9 +31,9 @@ if "client" not in st.session_state: st.session_state.client = genai.Client(api_
 if "chat" not in st.session_state: st.session_state.chat = []
 if "resultado" not in st.session_state: st.session_state.resultado = ""
 
-# --- TELA DE LOGIN CORRIGIDA SEM LOOPING ---
+# --- TELA DE LOGIN ADAPTATIVA ---
 if not st.session_state.autenticado:
-    st.title("🔐 Acesso Restrito: E.E.B. Prefeito Olegário Bernardes")
+    st.title("🔐 B.IA: Assistente Pedagógica")
     aba_login, aba_cadastro = st.tabs(["Entrar no Sistema", "Cadastrar Novo Professor"])
     with aba_login:
         email = st.text_input("E-mail funcional:", key="login_email")
@@ -32,13 +43,13 @@ if not st.session_state.autenticado:
                 res = st.session_state.supabase.auth.sign_in_with_password({"email": email, "password": senha})
                 if res.session:
                     st.session_state.autenticado = True
-                    st.success("✅ Usuário validado com sucesso!")
+                    st.success("✅ Credenciais validadas com sucesso!")
             except:
                 st.error("E-mail ou senha incorretos no banco de dados.")
         
         if st.session_state.autenticado:
-            if st.button("🚀 ENTRAR NO GERADOR AGORA"):
-                st.skip()
+            if st.button("🚀 CLIQUE AQUI PARA ENTRAR NO PAINEL"):
+                st.write("Carregando...")
                 
     with aba_cadastro:
         novo_email = st.text_input("E-mail do Professor:", key="cad_email")
@@ -51,7 +62,7 @@ if not st.session_state.autenticado:
     st.stop()
 
 # --- INTERFACE PRINCIPAL ---
-st.title("Sistema Pedagógico Pro: E.E.B. Olegário Bernardes")
+st.title("🧠 B.IA: Assistente Pedagógica")
 with st.sidebar:
     st.header("⚙️ Painel do Professor")
     net = st.toggle("🔓 Liberar Internet (Google Search)", value=False)
@@ -59,7 +70,6 @@ with st.sidebar:
     if st.button("🚪 Sair do Sistema"):
         st.session_state.autenticado = False
         st.session_state.supabase.auth.sign_out()
-        st.skip()
 
 prof = st.text_input("Nome do(a) Professor(a):", value="")
 comp = st.text_input("Componente Curricular / Disciplina:")
@@ -78,6 +88,7 @@ if arqs and len(arqs) <= 3:
                 for pg in PdfReader(arq).pages: txt_ref += (pg.extract_text() or "") + "\n"
             st.success(f"✅ {arq.name} ok!")
         except: st.error("Erro ao ler arquivo.")
+
 # 🧠 TRADUTOR DE ASTERISCOS PARA NEGRITO REAL NO WORD
 def aplicar_formatacao_inteligente(paragrafo, texto_com_tags):
     paragrafo.text = ""

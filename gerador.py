@@ -12,19 +12,31 @@ st.set_page_config(page_title="Gerador Olegário Pro", layout="wide")
 SUPABASE_URL = "https://hgdpahtyvoridomkktkt.supabase.co"
 SUPABASE_KEY = "sb_publishable_yxUHijFIrK7h2yznh8ySKw_4eBFxAlI"
 
-# 🔑 COLE A SUA CHAVE NOVA DO GOOGLE EXATAMENTE DENTRO DAS ASPAS ABAIXO:
-MINHA_CHAVE = "AQ.Ab8RN6LXEsq7OanSJP4TYH0xaQOD7y_NhTpKw2aSvanhp2hSNQ"
+# 🔒 Segurança Total: O código agora puxa a chave direto das configurações do Streamlit!
+if "GEMINI_API_KEY" in st.secrets:
+    MINHA_CHAVE = st.secrets["GEMINI_API_KEY"]
+elif "MINHA_CHAVE" in st.get_environ():
+    MINHA_CHAVE = os.environ["MINHA_CHAVE"]
+else:
+    MINHA_CHAVE = "CHAVE_NAO_CONFIGURADA"
 
 if "supabase" not in st.session_state: st.session_state.supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 if "autenticado" not in st.session_state: st.session_state.autenticado = False
-if "client" not in st.session_state: st.session_state.client = genai.Client(api_key=MINHA_CHAVE)
+
+# Inicializa o cliente apenas se tiver uma chave configurada
+if "client" not in st.session_state and MINHA_CHAVE != "CHAVE_NAO_CONFIGURADA":
+    st.session_state.client = genai.Client(api_key=MINHA_CHAVE)
+    
 if "resultado" not in st.session_state: st.session_state.resultado = ""
 
 # --- CONFIGURAÇÃO DA MEMÓRIA DO CHAT ---
-if "objeto_chat" not in st.session_state:
+if "objeto_chat" not in st.session_state and "client" in st.session_state:
     try:
         st.session_state.objeto_chat = st.session_state.client.chats.create(model="gemini-2.5-flash")
     except:
+        st.session_state.objeto_chat = None
+else:
+    if "objeto_chat" not in st.session_state:
         st.session_state.objeto_chat = None
 
 if "mensagens_tela" not in st.session_state:
@@ -132,6 +144,10 @@ def preencher_word(nome_modelo, dados_tags):
 st.write("---")
 aba1, aba2, aba3, aba4, aba_chat = st.tabs(["📅 Plano Anual", "📝 Plano Mensal/Quinzenal", "✍️ Avaliações/Atividades", "📊 Relatórios", "💬 Conversar com a B.IA"])
 
+if MINHA_CHAVE == "CHAVE_NAO_CONFIGURADA":
+    st.warning("⚠️ O sistema está quase pronto! Falta apenas configurar sua GEMINI_API_KEY no painel de Secrets do Streamlit.")
+    st.stop()
+
 with aba1:
     if st.button("✨ GERAR PLANO ANUAL", key="b1"):
         with st.spinner("Processando..."):
@@ -217,9 +233,9 @@ with aba_chat:
                     st.session_state.mensagens_tela.append({"role": "assistant", "text": resposta_texto})
                     st.rerun()
                 except Exception as e:
-                    st.error(f"⚠️ Erro na API: Verifique sua chave do Gemini. Técnico: {e}")
+                    st.error(f"⚠️ Erro na API. Técnico: {e}")
             else:
-                st.error("⚠️ Não foi possível iniciar o chat. Certifique-se de que inseriu uma chave válida na linha 16.")
+                st.error("⚠️ Não foi possível iniciar o chat. Certifique-se de configurar os Secrets.")
 
 # --- PAINEL DE VISUALIZAÇÃO DE DOCUMENTOS (GERADOR) ---
 if st.session_state.resultado:

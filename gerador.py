@@ -22,14 +22,6 @@ if "historico_chat" not in st.session_state:
         {"role": "model", "text": "Olá! Eu sou a B.IA, sua assistente pedagógica e companheira de trabalho. Sobre o que você gostaria de conversar ou planejar hoje? Estou pronta para ajudar em qualquer assunto!"}
     ]
 
-# --- MATRIZ BASE ESTÁTICA DO CALENDÁRIO DA ESCOLA ---
-HORARIOS_ESCOLA_FIXO = """
-EEB PREF OLEGARIO BERNARDES - MATUTINO
-HORÁRIOS DOS PROFESSORES E DISCIPLINAS (URÂNIA):
-ACT(FIS), ADALBERTO(MAT), ADENIR(ED.FIS), ADRIANO(MAT), ALINE(ESP), ALINE(QUI), ANA(ARTE), ANDRÉ(BIO), BERNARDINO(ING), BIANCA(QUI), CATIA(LPL), CATIANA(MAT), CLAUDEMIR(MAT), CRISTINA(LPL), DANI(ARTE), DAVID(ED.FIS), DAYANE(GEO), DEBORA(BIO), DINARA(ING/LPL), EDUARDO(HIST), Eliete(ESP), ELITON, EMANOELI(SOC), FABIO(ED.FIS), FABRICIO(QUI), GIOVANNI(FIS), GUSTAVO (HIST), JAIR(BIO), KAROL(MAT), MARCIO(FIL), MARIA B(BIO), MARIELE(GEO), MAURICIO(GEO), PATRICIA(LPL), RODNALDO(SOC), RODRIGO(FIL), THAISE(ADM/GESTÃO), THOMAS(FIL), VALDIR (SOC), VANISE(GEO), VANESSA(LPL), VIVI(HIST).
-Todas as turmas (101, 102, 103, 104, 105, 106, 107, 108(LOG), 201, 202, 203, 204, 205, 206, 207, 301, 302, 303, 304, 305, 306) estão mapeadas de 1º a 6º aula.
-"""
-
 # --- TELA DE LOGIN ---
 if not st.session_state.autenticado:
     st.title("🔐 B.IA: Assistente Pedagógica")
@@ -187,35 +179,41 @@ with aba_chat:
             st.session_state.historico_chat.append({"role": "model", "text": resposta_gemini})
             st.rerun()
 
-# --- 📆 ABA DO CALENDÁRIO TOTALMENTE ESTÁTICA E INTERATIVA ---
+# --- 📆 LEITURA DIRETA DO ARQUIVO PDF ESTÁTICO DO REPOSITÓRIO ---
 with aba_cal:
     st.subheader("📆 Painel de Horários Oficial (EEB Pref Olegário Bernardes)")
-    st.info("O calendário geral do turno Matutino já está salvo na memória do sistema!")
     
-    st.write("🔍 **Consulte a grade semanal por Professor ou por Turma/Aluno:**")
-    termo_busca = st.text_input("Digite o nome do Professor ou o número da Turma (Ex: BIANCA, ADRIANO, VIVI, 301, 108):").upper()
+    caminho_pdf = "calendario_eeb_olegario.pdf"
     
-    if termo_busca:
-        with st.spinner(f"B.IA localizando a grade horária para '{termo_busca}'..."):
-            # O prompt aciona a base de dados interna do Gemini que leu o PDF anteriormente
-            prompt_filtro = (
-                f"Você é um assistente escolar especializado. Com base no relatório de horários do Urânia da escola Olegário Bernardes, "
-                f"monte uma tabela clássica de horários semanais (Linhas: 1º a 6º aula | Colunas: Segunda a Sexta) estruturada para a pesquisa: '{termo_busca}'. "
-                f"Se o termo for um professor (como BIANCA, ADRIANO, VIVI, CATIA), mostre as turmas onde ele dá aula. "
-                f"Se for uma turma (como 301, 302, 108(LOG)), mostre as disciplinas ou os professores que estarão nela em cada período. "
-                f"Seja preciso e use uma formatação de tabela Markdown limpa."
-            )
-            
-            # Buscando o arquivo PDF que enviamos antes que está salvo no repositório do GitHub
-            try:
-                with open("modelo_anual.docx", "rb") as f: pass # Apenas para validar o caminho
-                resposta_filtro = st.session_state.client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=[prompt_filtro, HORARIOS_ESCOLA_FIXO]
-                ).text
-                st.markdown(resposta_filtro)
-            except Exception as e:
-                st.error("Erro ao conectar com a base de dados do calendário.")
+    if os.path.exists(caminho_pdf):
+        st.info("✅ Base de dados do Urânia carregada com sucesso diretamente do sistema escolar!")
+        st.write("🔍 **Consulte a grade semanal por Professor ou por Turma/Aluno:**")
+        termo_busca = st.text_input("Digite o nome do Professor ou o número da Turma (Ex: BIANCA, ADRIANO, VIVI, 301, 108):").upper()
+        
+        if termo_busca:
+            with st.spinner(f"B.IA localizando os horários para '{termo_busca}'..."):
+                try:
+                    with open(caminho_pdf, "rb") as f:
+                        pdf_bytes = f.read()
+                    
+                    documento_inline = types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf")
+                    
+                    prompt_filtro = (
+                        f"Analise o relatório completo de horários escolares do Urânia contido neste PDF. "
+                        f"Filtre os dados com precisão absoluta e monte uma tabela clássica de horários semanais (com linhas de 1º a 6º aula "
+                        f"e colunas de Segunda a Sexta) mostrando onde o termo '{termo_busca}' aparece. "
+                        f"Se o termo for um PROFESSOR, liste as turmas dele. Se for uma TURMA, mostre as disciplinas e os nomes dos professores de cada aula."
+                    )
+                    
+                    resposta_filtro = st.session_state.client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=[documento_inline, prompt_filtro]
+                    ).text
+                    st.markdown(resposta_filtro)
+                except Exception as e:
+                    st.error("Erro no processamento da inteligência artificial ao ler o arquivo.")
+    else:
+        st.warning("⚠️ O arquivo 'calendario_eeb_olegario.pdf' não foi encontrado na pasta do GitHub. Por favor, faça o upload dele para ativar este painel.")
 
 # --- PAINEL DE VISUALIZAÇÃO DE DOCUMENTOS GERAIS ---
 if st.session_state.resultado:

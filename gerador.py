@@ -123,13 +123,12 @@ def preencher_word(nome_modelo, dados_tags):
 
 st.write("---")
 aba1, aba2, aba3, aba4, aba_chat = st.tabs(["📅 Plano Anual", "📝 Plano Mensal/Quinzenal", "✍️ Avaliações/Atividades", "📊 Relatórios", "💬 Conversar com a B.IA"])
-cfg = types.GenerateContentConfig()
 
 with aba1:
     if st.button("✨ GERAR PLANO ANUAL", key="b1"):
         with st.spinner("Processando..."):
             pt = f"Crie um plano anual de {comp} ({turma}). Use as tags: [COMPETENCIAS_GERAIS], [COMPETENCIAS_ESPECIFICAS], [CONCEITOS1], [OBJETO1], [HABILIDADES1], [CONCEITOS2], [OBJETO2], [HABILIDADES2], [CONCEITOS3], [OBJETO3], [HABILIDADES3], [INSTRUMENTOS], [REFERENCIAS]. Use asteriscos duplos para marcar negritos.\n\nREF:\n{txt_ref}"
-            st.session_state.resultado = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=pt, config=cfg).text
+            st.session_state.resultado = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=pt).text
             st.session_state.modelo_atual = "modelo_anual.docx"
 
 with aba2:
@@ -139,7 +138,7 @@ with aba2:
     if st.button("✨ GERAR ESTRUTURA MENSAL", key="b2"):
         with st.spinner("Processando..."):
             pt = f"Crie um plano de aula para {mes} de {comp} ({turma}). Foco: {cmd_mensal}. Separe o texto estritamente por: [AREA], [HABILIDADES], [OBJETO], [CRITERIOS], [METODOLOGIA], [INSTRUMENTOS], [REFERENCIAS]. Use asteriscos duplos para marcar negritos.\n\nREF:\n{txt_ref}"
-            st.session_state.resultado = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=pt, config=cfg).text
+            st.session_state.resultado = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=pt).text
             st.session_state.modelo_atual = "modelo_mensal.docx"
             st.session_state.duracao_input = duracao
 
@@ -160,7 +159,7 @@ with aba3:
             dif_texto = detalhes_personalizados if nivel == "Personalizado" else nivel
             pt = f"Crie uma atividade do tipo {t_av} com {qst} questões de {comp} ({turma}). O nível de dificuldade deve ser: {dif_texto}. Inclua obrigatoriamente um GABARITO detalhado no final do documento. Use asteriscos duplos para marcar os negritos dos enunciados e alternativas."
             if txt_ref: pt += f"\n\nUse como base técnica e de apoio estes arquivos de referência:\n{txt_ref}"
-            st.session_state.resultado = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=pt, config=cfg).text
+            st.session_state.resultado = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=pt).text
             st.session_state.modelo_atual = "modelo_avaliacao.docx"
 
 with aba4:
@@ -169,10 +168,10 @@ with aba4:
     if st.button("✨ GERAR RELATÓRIO", key="b4"):
         with st.spinner("Processando..."):
             pt = f"Escreva um relatório do tipo {t_re} para {comp} ({turma}). Contexto: {ctx}. Use asteriscos duplos para marcar negritos."
-            st.session_state.resultado = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=pt, config=cfg).text
+            st.session_state.resultado = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=pt).text
             st.session_state.modelo_atual = "modelo_avaliacao.docx"
 
-# --- 💬 CONTEÚDO DA ABA: CHAT LIVRE COM A B.IA ---
+# --- 💬 CONTEÚDO DA ABA: CHAT LIVRE COM A B.IA CORRIGIDO ---
 with aba_chat:
     st.subheader("💬 Sala de Conversa com a B.IA")
     st.caption("Fale sobre qualquer assunto, tire dúvidas ou peça conselhos pedagógicos à vontade!")
@@ -187,9 +186,11 @@ with aba_chat:
         st.session_state.historico_chat.append({"role": "user", "text": prompt})
         
         with st.spinner("B.IA está pensando..."):
+            # Converte o histórico de forma simples e limpa para enviar ao Gemini
             conversa_formatada = []
             for m in st.session_state.historico_chat:
-                conversa_formatada.append(types.Content(role=m["role"], parts=[types.Part.from_text(text=m["text"])]))
+                role_val = "user" if m["role"] == "user" else "model"
+                conversa_formatada.append(types.Content(role=role_val, parts=[types.Part.from_text(text=m["text"])]))
             
             resposta_gemini = st.session_state.client.models.generate_content(
                 model='gemini-2.5-flash',
@@ -212,7 +213,7 @@ if st.session_state.resultado:
         def ext(tg, tx):
             m = re.search(rf"\[{tg}\](.*?)(?=\[\w+\]|$)", tx, re.DOTALL)
             return m.group(1).strip() if m else "Em branco."
-        tags_map.update({"{{COMPETENCIAS_GERAIS}}": ext("COMPETENCIAS_GERAIS", texto_editado), "{{COMPETENCIAS_ESPECIFICAS}}": ext("COMPETENCIAS_ESPECIFICAS", texto_editado), "{{CONCEITOS1}}": ext("CONCEITOS1", texto_editado), "{{OBJETO_CONHECIMENTO1}}": ext("OBJETO1", texto_editado), "{{HABILIDADES1}}": ext("HABILIDADES1", texto_editated), "{{CONCEITOS2}}": ext("CONCEITOS2", texto_editado), "{{OBJETO_CONHECIMENTO2}}": ext("OBJETO2", texto_editado), "{{HABILIDADES2}}": ext("HABILIDADES2", texto_editado), "{{CONCEITOS3}}": ext("CONCEITOS3", texto_editado), "{{OBJETO_CONHECIMENTO3}}": ext("OBJETO3", texto_editado), "{{HABILIDADES3}}": ext("HABILIDADES3", texto_editado), "{{INSTRUMENTOS}}": ext("INSTRUMENTOS", texto_editado), "{{REFERENCIAS}}": ext("REFERENCIAS", texto_editado)})
+        tags_map.update({"{{COMPETENCIAS_GERAIS}}": ext("COMPETENCIAS_GERAIS", texto_editado), "{{COMPETENCIAS_ESPECIFICAS}}": ext("COMPETENCIAS_ESPECIFICAS", texto_editado), "{{CONCEITOS1}}": ext("CONCEITOS1", texto_editado), "{{OBJETO_CONHECIMENTO1}}": ext("OBJETO1", texto_editado), "{{HABILIDADES1}}": ext("HABILIDADES1", texto_editado), "{{CONCEITOS2}}": ext("CONCEITOS2", texto_editado), "{{OBJETO_CONHECIMENTO2}}": ext("OBJETO2", texto_editado), "{{HABILIDADES2}}": ext("HABILIDADES2", texto_editado), "{{CONCEITOS3}}": ext("CONCEITOS3", texto_editado), "{{OBJETO_CONHECIMENTO3}}": ext("OBJETO3", texto_editado), "{{HABILIDADES3}}": ext("HABILIDADES3", texto_editado), "{{INSTRUMENTOS}}": ext("INSTRUMENTOS", texto_editado), "{{REFERENCIAS}}": ext("REFERENCIAS", texto_editado)})
     elif st.session_state.modelo_atual == "modelo_mensal.docx":
         def ext_m(tg, tx):
             m = re.search(rf"\[{tg}\](.*?)(?=\[\w+\]|$)", tx, re.DOTALL)
@@ -221,4 +222,4 @@ if st.session_state.resultado:
     
     w_bytes = preencher_word(st.session_state.modelo_atual, tags_map)
     if w_bytes: st.download_button("📥 BAIXAR DOCUMENTO NO MODELO OFICIAL (.DOCX)", data=w_bytes, file_name=f"Documento_{comp}.docx", key="dl_f")
-    else: st.error("⚠️ Verifique os arquivos de modelo na pasta.")
+    else: st.

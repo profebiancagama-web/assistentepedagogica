@@ -18,6 +18,12 @@ if "autenticado" not in st.session_state: st.session_state.autenticado = False
 if "client" not in st.session_state: st.session_state.client = genai.Client(api_key=MINHA_CHAVE)
 if "resultado" not in st.session_state: st.session_state.resultado = ""
 
+# --- CONFIGURAÇÃO DA MEMÓRIA DO CHAT ---
+if "historico_chat" not in st.session_state:
+    st.session_state.historico_chat = [
+        {"role": "model", "text": "Olá! Eu sou a B.IA, sua assistente pedagógica e companheira de trabalho. Sobre o que você gostaria de conversar ou planejar hoje? Estou pronta para ajudar em qualquer assunto!"}
+    ]
+
 # --- TELA DE LOGIN ---
 if not st.session_state.autenticado:
     st.title("🔐 B.IA: Assistente Pedagógica")
@@ -116,7 +122,8 @@ def preencher_word(nome_modelo, dados_tags):
     return buf.getvalue()
 
 st.write("---")
-aba1, aba2, aba3, aba4 = st.tabs(["📅 Plano Anual", "📝 Plano Mensal/Quinzenal", "✍️ Avaliações/Atividades", "📊 Relatórios"])
+# ADICIONADA A NOVA ABA DO CHAT DA B.IA
+aba1, aba2, aba3, aba4, aba_chat = st.tabs(["📅 Plano Anual", "📝 Plano Mensal/Quinzenal", "✍️ Avaliações/Atividades", "📊 Relatórios", "💬 Conversar com a B.IA"])
 cfg = types.GenerateContentConfig()
 
 with aba1:
@@ -137,7 +144,6 @@ with aba2:
             st.session_state.modelo_atual = "modelo_mensal.docx"
             st.session_state.duracao_input = duracao
 
-# --- ✍️ ABA DE AVALIAÇÕES ATUALIZADA (COM NÍVEIS E PRÉ-VISUALIZAÇÃO DO GEMINI) ---
 with aba3:
     col1, col2 = st.columns(2)
     with col1:
@@ -154,9 +160,7 @@ with aba3:
         with st.spinner("A B.IA está formulando suas questões..."):
             dif_texto = detalhes_personalizados if nivel == "Personalizado" else nivel
             pt = f"Crie uma atividade pedagógica do tipo {t_av} com {qst} questões de {comp} ({turma}). O nível de dificuldade deve ser: {dif_texto}. Inclua obrigatoriamente um GABARITO detalhado no final do documento. Use asteriscos duplos para marcar os negritos dos enunciados e alternativas."
-            if txt_ref:
-                pt += f"\n\nUse como base técnica e de apoio estes arquivos de referência:\n{txt_ref}"
-            
+            if txt_ref: pt += f"\n\nUse como base técnica e de apoio estes arquivos de referência:\n{txt_ref}"
             st.session_state.resultado = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=pt, config=cfg).text
             st.session_state.modelo_atual = "modelo_avaliacao.docx"
 
@@ -169,14 +173,45 @@ with aba4:
             st.session_state.resultado = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=pt, config=cfg).text
             st.session_state.modelo_atual = "modelo_avaliacao.docx"
 
-# --- PAINEL EXCLUSIVO DE VISUALIZAÇÃO EM TEMPO REAL NO CORPO DA TELA ---
+# --- 💬 CONTEÚDO DA NOVA ABA: CHAT LIVRE COM A B.IA ---
+with aba_chat:
+    st.subheader("💬 Sala de Conversa com a B.IA")
+    st.caption("Fale sobre qualquer assunto, tire dúvidas ou peça conselhos pedagógicos à vontade!")
+    
+    # Exibe as mensagens antigas do chat na tela com visual de conversa
+    for msg in st.session_state.historico_chat:
+        with st.chat_message("user" if msg["role"] == "user" else "assistant"):
+            st.write(msg["text"])
+            
+    # Campo de entrada de texto do chat
+    if prompt := st.chat_input("Digite sua mensagem para a B.IA..."):
+        # Mostra o que o usuário acabou de digitar
+        with st.chat_message("user"):
+            st.write(prompt)
+        st.session_state.historico_chat.append({"role": "user", "text": prompt})
+        
+        with st.spinner("B.IA está pensando..."):
+            # Envia a conversa inteira (com a memória) para a API do Gemini processar
+            conversa_formatada = []
+            for m in st.session_state.historico_chat:
+                conversa_formatada.append(types.Content(role=m["role"], parts=[types.Part.from_text(text=m["text"])]))
+            
+            resposta_gemini = st.session_state.client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=conversa_formatada
+            ).text
+            
+            # Mostra a resposta da inteligência artificial
+            with st.chat_message("assistant"):
+                st.write(resposta_gemini)
+            st.session_state.historico_chat.append({"role": "model", "text": resposta_gemini})
+            st.rerun()
+
+# --- PAINEL DE VISUALIZAÇÃO DE DOCUMENTOS (GERADOR) ---
 if st.session_state.resultado:
     st.write("---")
     st.subheader("🖥️ Tela da B.IA: Base de Dados Gemini em Tempo Real")
-    
-    # Caixa onde o professor vê e pode até mexer no texto gerado antes de baixar
     texto_editado = st.text_area("Você pode revisar ou ajustar o texto abaixo diretamente:", value=st.session_state.resultado, height=350)
-    
     tags_map = {"{{PROFESSOR}}": prof, "{{COMPONENTE}}": comp, "{{TURMA}}": turma, "{{CORPO_PROVA}}": texto_editado, "{{TEXTO_RELATORIO}}": texto_editado}
     
     if st.session_state.modelo_atual == "modelo_anual.docx":
@@ -191,8 +226,5 @@ if st.session_state.resultado:
         tags_map.update({"{{AREA_CONHECIMENTO}}": ext_m("AREA", texto_editado), "{{HABILIDADES_MENSAL}}": ext_m("HABILIDADES", texto_editado), "{{OBJETO_MENSAL}}": ext_m("OBJETO", texto_editado), "{{CRITERIOS_MENSAL}}": ext_m("CRITERIOS", texto_editado), "{{METODOLOGIA_MENSAL}}": ext_m("METODOLOGIA", texto_editado), "{{INSTRUMENTOS_MENSAL}}": ext_m("INSTRUMENTOS", texto_editado), "{{DURACAO_MENSAL}}": st.session_state.get("duracao_input", "15 dias"), "{{REFERENCIAS_MENSAL}}": ext_m("REFERENCIAS", texto_editado)})
     
     w_bytes = preencher_word(st.session_state.modelo_atual, tags_map)
-    
-    if w_bytes: 
-        st.download_button("📥 BAIXAR DOCUMENTO NO MODELO OFICIAL (.DOCX)", data=w_bytes, file_name=f"Documento_{comp}.docx", key="dl_f")
-    else: 
-        st.error("⚠️ Verifique os arquivos de modelo na pasta.")
+    if w_bytes: st.download_button("📥 BAIXAR DOCUMENTO NO MODELO OFICIAL (.DOCX)", data=w_bytes, file_name=f"Documento_{comp}.docx", key="dl_f")
+    else: st.error("⚠️ Verifique os arquivos de modelo na pasta.")

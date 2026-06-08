@@ -6,7 +6,6 @@ from google.genai import types
 from pypdf import PdfReader
 from supabase import create_client, Client
 import io, os, re
-import pandas as pd
 
 st.set_page_config(page_title="Gerador Olegário Pro", layout="wide")
 
@@ -102,4 +101,146 @@ def preencher_word(nome_modelo, dados_tags):
     def processar_paragrafo(p):
         for tg, tx in dados_tags.items():
             if tg in p.text:
-                if tg in
+                if tg in ["{{CORPO_PROVA}}", "{{TEXTO_RELATORIO}}"] or tg.startswith("{{"):
+                    texto_final = p.text.replace(tg, tx)
+                    aplicar_formatacao_inteligente(p, texto_final)
+                else:
+                    p.text = p.text.replace(tg, tx)
+                    for r in p.runs: r.font.name, r.font.size, r.font.color.rgb = 'Arial', Pt(12), RGBColor(0,0,0)
+    for p in doc.paragraphs: processar_paragrafo(p)
+    for t in doc.tables:
+        for l in t.rows:
+            for c in l.cells:
+                for p in c.paragraphs: processar_paragrafo(p)
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
+
+st.write("---")
+aba1, aba2, aba3, aba4, aba_chat, aba_cal = st.tabs(["📅 Plano Anual", "📝 Plano Mensal/Quinzenal", "✍️ Avaliações/Atividades", "📊 Relatórios", "💬 Conversar com a B.IA", "📆 Calendário da Escola"])
+cfg = types.GenerateContentConfig()
+
+with aba1:
+    if st.button("✨ GERAR PLANO ANUAL", key="b1"):
+        with st.spinner("Processando..."):
+            pt = f"Crie um plano anual de {comp} ({turma}). Use as tags: [COMPETENCIAS_GERAIS], [COMPETENCIAS_ESPECIFICAS], [CONCEITOS1], [OBJETO1], [HABILIDADES1], [CONCEITOS2], [OBJETO2], [HABILIDADES2], [CONCEITOS3], [OBJETO3], [HABILIDADES3], [INSTRUMENTOS], [REFERENCIAS].\n\nREF:\n{txt_ref}"
+            st.session_state.resultado = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=pt, config=cfg).text
+            st.session_state.modelo_atual = "modelo_anual.docx"
+
+with aba2:
+    mes = st.selectbox("Selecione o Mês:", ["Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"])
+    duracao = st.text_input("Tempo de duração:", value="15 dias")
+    cmd_mensal = st.text_input("Foco temático do plano:")
+    if st.button("✨ GERAR ESTRUTURA MENSAL", key="b2"):
+        with st.spinner("Processando..."):
+            pt = f"Crie um plano de aula para {mes} de {comp} ({turma}). Foco: {cmd_mensal}. Separe por: [AREA], [HABILIDADES], [OBJETO], [CRITERIOS], [METODOLOGIA], [INSTRUMENTOS], [REFERENCIAS].\n\nREF:\n{txt_ref}"
+            st.session_state.resultado = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=pt, config=cfg).text
+            st.session_state.modelo_atual = "modelo_mensal.docx"
+            st.session_state.duracao_input = duracao
+
+with aba3:
+    col1, col2 = st.columns(2)
+    with col1:
+        t_av = st.selectbox("Tipo de Atividade:", ["Prova Objetiva/Discursiva", "Recuperação Paralela", "Trabalho Dirigido", "Lista de Exercícios"])
+        qst = st.slider("Quantidade de Questões:", 1, 15, 5)
+    with col2:
+        nivel = st.selectbox("Nível de Dificuldade:", ["Fácil", "Médio", "Difícil", "Personalizado"])
+        detalhes_personalizados = st.text_input("Especificações do nível:") if nivel == "Personalizado" else ""
+
+    if st.button("✨ GERAR ATIVIDADE WITH BASE NO GEMINI", key="b3"):
+        with st.spinner("A B.IA está formulando suas questões..."):
+            dif_texto = detalhes_personalizados if nivel == "Personalizado" else nivel
+            pt = f"Crie uma atividade do tipo {t_av} com {qst} questões de {comp} ({turma}). Nível: {dif_texto}. Inclua GABARITO detalhado. Marque negritos com asteriscos duplos."
+            if txt_ref: pt += f"\n\nUse como base:\n{txt_ref}"
+            st.session_state.resultado = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=pt, config=cfg).text
+            st.session_state.modelo_atual = "modelo_avaliacao.docx"
+
+with aba4:
+    t_re = st.selectbox("Tipo Relatório:", ["Desempenho da Turma", "Aluno PDI/AEE"])
+    ctx = st.text_area("Contexto do Aluno/Turma:")
+    if st.button("✨ GERAR RELATÓRIO", key="b4"):
+        with st.spinner("Processando..."):
+            pt = f"Escreva um relatório do tipo {t_re} para {comp} ({turma}). Contexto: {ctx}."
+            st.session_state.resultado = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=pt, config=cfg).text
+            st.session_state.modelo_atual = "modelo_avaliacao.docx"
+
+with aba_chat:
+    st.subheader("💬 Sala de Conversa com a B.IA")
+    for msg in st.session_state.historico_chat:
+        with st.chat_message("user" if msg["role"] == "user" else "assistant"): st.write(msg["text"])
+    if prompt := st.chat_input("Digite sua mensagem para a B.IA..."):
+        with st.chat_message("user"): st.write(prompt)
+        st.session_state.historico_chat.append({"role": "user", "text": prompt})
+        with st.spinner("B.IA está pensando..."):
+            conversa_formatada = [types.Content(role=m["role"], parts=[types.Part.from_text(text=m["text"])]) for m in st.session_state.historico_chat]
+            resposta_gemini = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=conversa_formatada).text
+            with st.chat_message("assistant"): st.write(resposta_gemini)
+            st.session_state.historico_chat.append({"role": "model", "text": resposta_gemini})
+            st.rerun()
+
+# --- 📆 PAINEL DE HORÁRIOS DA ESCOLA CORRIGIDO ---
+with aba_cal:
+    st.subheader("📆 Painel de Horários da Escola (Olegário Bernardes)")
+    st.write("Faça o upload do PDF completo de horários gerado pelo Urânia para liberar as buscas!")
+    
+    arq_calendario = st.file_uploader("Suba o PDF Geral de Horários aqui:", type=["pdf"], key="uploader_calendario")
+    
+    if arq_calendario:
+        with st.spinner("A B.IA está mapeando a grade horária da escola..."):
+            pdf_text = ""
+            for pg in PdfReader(arq_calendario).pages:
+                pdf_text += (pg.extract_text() or "") + "\n"
+            
+            prompt_extracao = (
+                f"Analise o seguinte texto extraído de um relatório de horários escolares do Urânia. "
+                f"Extraia e organize em formato de texto estruturado o horário de TODOS os professores e turmas identificáveis. "
+                f"Aqui está o texto bruto:\n\n{pdf_text}"
+            )
+            
+            if "dados_escola_brutos" not in st.session_state:
+                st.session_state.dados_escola_brutos = st.session_state.client.models.generate_content(
+                    model='gemini-2.5-flash', 
+                    contents=prompt_extracao
+                ).text
+            
+            st.success("✅ Toda a estrutura da escola foi carregada com sucesso!")
+            st.write("---")
+            
+            st.write("🔍 **Consulte qualquer Horário por Professor ou por Turma:**")
+            termo_busca = st.text_input("Exemplo: 'BIANCA', 'ADRIANO', '301', '108(LOG)', 'VIVI':").upper()
+            
+            if termo_busca:
+                with st.spinner(f"Buscando horários para '{termo_busca}'..."):
+                    prompt_filtro = (
+                        f"Com base na estrutura de horários que você analisou anteriormente, "
+                        f"filtre e monte especificamente uma tabela clássica de horários (de 1º a 6º aula, de segunda a sexta) "
+                        f"apenas para o termo correspondente a: {termo_busca}. "
+                        f"Estrutura de dados para consulta:\n\n{st.session_state.dados_escola_brutos}"
+                    )
+                    resposta_filtro = st.session_state.client.models.generate_content(
+                        model='gemini-2.5-flash', 
+                        contents=prompt_filtro
+                    ).text
+                    st.markdown(resposta_filtro)
+
+# --- PAINEL DE VISUALIZAÇÃO DE DOCUMENTOS GERAIS ---
+if st.session_state.resultado:
+    st.write("---")
+    st.subheader("🖥️ Tela da B.IA: Base de Dados Gemini em Tempo Real")
+    texto_editado = st.text_area("Você pode revisar ou ajustar o texto abaixo diretamente:", value=st.session_state.resultado, height=350)
+    tags_map = {"{{PROFESSOR}}": prof, "{{COMPONENTE}}": comp, "{{TURMA}}": turma, "{{CORPO_PROVA}}": texto_editado, "{{TEXTO_RELATORIO}}": texto_editado}
+    
+    if st.session_state.modelo_atual == "modelo_anual.docx":
+        def ext(tg, tx):
+            m = re.search(rf"\[{tg}\](.*?)(?=\[\w+\]|$)", tx, re.DOTALL)
+            return m.group(1).strip() if m else "Em branco."
+        tags_map.update({"{{COMPETENCIAS_GERAIS}}": ext("COMPETENCIAS_GERAIS", texto_editado), "{{COMPETENCIAS_ESPECIFICAS}}": ext("COMPETENCIAS_ESPECIFICAS", texto_editado), "{{CONCEITOS1}}": ext("CONCEITOS1", texto_editado), "{{OBJETO_CONHECIMENTO1}}": ext("OBJETO1", texto_editado), "{{HABILIDADES1}}": ext("HABILIDADES1", texto_editado), "{{CONCEITOS2}}": ext("CONCEITOS2", texto_editado), "{{OBJETO_CONHECIMENTO2}}": ext("OBJETO2", texto_editado), "{{HABILIDADES2}}": ext("HABILIDADES2", texto_editado), "{{CONCEITOS3}}": ext("CONCEITOS3", texto_editado), "{{OBJETO_CONHECIMENTO3}}": ext("OBJETO3", texto_editado), "{{HABILIDADES3}}": ext("HABILIDADES3", texto_editado), "{{INSTRUMENTOS}}": ext("INSTRUMENTOS", texto_editado), "{{REFERENCIAS}}": ext("REFERENCIAS", texto_editado)})
+    elif st.session_state.modelo_atual == "modelo_mensal.docx":
+        def ext_m(tg, tx):
+            m = re.search(rf"\[{tg}\](.*?)(?=\[\w+\]|$)", tx, re.DOTALL)
+            return m.group(1).strip() if m else "Em branco."
+        tags_map.update({"{{AREA_CONHECIMENTO}}": ext_m("AREA", texto_editado), "{{HABILIDADES_MENSAL}}": ext_m("HABILIDADES", texto_editado), "{{OBJETO_MENSAL}}": ext_m("OBJETO", texto_editado), "{{CRITERIOS_MENSAL}}": ext_m("CRITERIOS", texto_editado), "{{METODOLOGIA_MENSAL}}": ext_m("METODOLOGIA", texto_editado), "{{INSTRUMENTOS_MENSAL}}": ext_m("INSTRUMENTOS", texto_editado), "{{DURACAO_MENSAL}}": st.session_state.get("duracao_input", "15 dias"), "{{REFERENCIAS_MENSAL}}": ext_m("REFERENCIAS", texto_editado)})
+    
+    w_bytes = preencher_word(st.session_state.modelo_atual, tags_map)
+    if w_bytes: st.download_button("📥 BAIXAR DOCUMENTO NO MODELO OFICIAL (.DOCX)", data=w_bytes, file_name=f"Documento_{comp}.docx", key="dl_f")

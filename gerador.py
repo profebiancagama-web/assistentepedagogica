@@ -5,7 +5,7 @@ from google import genai
 from google.genai import types
 from pypdf import PdfReader
 from supabase import create_client, Client
-import io, re
+import io, os, re
 
 st.set_page_config(page_title="Gerador Olegário Pro", layout="wide")
 
@@ -16,10 +16,9 @@ MINHA_CHAVE = "AQ.Ab8RN6LW-l2a1Qvu-8ZCD75G0OlT5RSVhxJpS3Pa6VcNQ88AFg"
 if "supabase" not in st.session_state: st.session_state.supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 if "autenticado" not in st.session_state: st.session_state.autenticado = False
 if "client" not in st.session_state: st.session_state.client = genai.Client(api_key=MINHA_CHAVE)
-if "chat" not in st.session_state: st.session_state.chat = []
 if "resultado" not in st.session_state: st.session_state.resultado = ""
 
-# --- TELA DE LOGIN ADAPTATIVA ---
+# --- TELA DE LOGIN ---
 if not st.session_state.autenticado:
     st.title("🔐 B.IA: Assistente Pedagógica")
     aba_login, aba_cadastro = st.tabs(["Entrar no Sistema", "Cadastrar Novo Professor"])
@@ -37,7 +36,7 @@ if not st.session_state.autenticado:
         
         if st.session_state.autenticado:
             if st.button("🚀 CLIQUE AQUI PARA ENTRAR NO PAINEL"):
-                st.write("Carregando...")
+                st.rerun()
                 
     with aba_cadastro:
         novo_email = st.text_input("E-mail do Professor:", key="cad_email")
@@ -58,6 +57,7 @@ with st.sidebar:
     if st.button("🚪 Sair do Sistema"):
         st.session_state.autenticado = False
         st.session_state.supabase.auth.sign_out()
+        st.rerun()
 
 prof = st.text_input("Nome do(a) Professor(a):", value="")
 comp = st.text_input("Componente Curricular / Disciplina:")
@@ -77,7 +77,7 @@ if arqs and len(arqs) <= 3:
             st.success(f"✅ {arq.name} ok!")
         except: st.error("Erro ao ler arquivo.")
 
-# 🧠 TRADUTOR DE ASTERISCOS PARA NEGRITO REAL NO WORD
+# 🧠 FORMATADOR INTELIGENTE DE TEXTO
 def aplicar_formatacao_inteligente(paragrafo, texto_com_tags):
     paragrafo.text = ""
     partes = re.split(r'(\*\*.*?\*\*)', texto_com_tags)
@@ -137,12 +137,26 @@ with aba2:
             st.session_state.modelo_atual = "modelo_mensal.docx"
             st.session_state.duracao_input = duracao
 
+# --- ✍️ ABA DE AVALIAÇÕES ATUALIZADA (COM NÍVEIS E PRÉ-VISUALIZAÇÃO DO GEMINI) ---
 with aba3:
-    t_av = st.selectbox("Tipo de Atividade:", ["Prova Objetiva/Discursiva", "Recuperação Paralela", "Trabalho Dirigido", "Lista de Exercícios"])
-    qst = st.slider("Questões:", 1, 10, 5)
-    if st.button("✨ GERAR ATIVIDADE/AVALIAÇÃO", key="b3"):
-        with st.spinner("Processando..."):
-            pt = f"Crie uma atividade do tipo {t_av} com {qst} questões de {comp} ({turma}) com GABARITO. Use asteriscos duplos para marcar negritos nos enunciados."
+    col1, col2 = st.columns(2)
+    with col1:
+        t_av = st.selectbox("Tipo de Atividade:", ["Prova Objetiva/Discursiva", "Recuperação Paralela", "Trabalho Dirigido", "Lista de Exercícios"])
+        qst = st.slider("Quantidade de Questões:", 1, 15, 5)
+    with col2:
+        nivel = st.selectbox("Nível de Dificuldade:", ["Fácil", "Médio", "Difícil", "Personalizado"])
+        if nivel == "Personalizado":
+            detalhes_personalizados = st.text_input("Digite as especificações do nível (ex: 'Misturar fácil e médio', 'Foco em alfabetização'):")
+        else:
+            detalhes_personalizados = ""
+
+    if st.button("✨ GERAR ATIVIDADE COM BASE NO GEMINI", key="b3"):
+        with st.spinner("A B.IA está formulando suas questões..."):
+            dif_texto = detalhes_personalizados if nivel == "Personalizado" else nivel
+            pt = f"Crie uma atividade pedagógica do tipo {t_av} com {qst} questões de {comp} ({turma}). O nível de dificuldade deve ser: {dif_texto}. Inclua obrigatoriamente um GABARITO detalhado no final do documento. Use asteriscos duplos para marcar os negritos dos enunciados e alternativas."
+            if txt_ref:
+                pt += f"\n\nUse como base técnica e de apoio estes arquivos de referência:\n{txt_ref}"
+            
             st.session_state.resultado = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=pt, config=cfg).text
             st.session_state.modelo_atual = "modelo_avaliacao.docx"
 
@@ -155,21 +169,30 @@ with aba4:
             st.session_state.resultado = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=pt, config=cfg).text
             st.session_state.modelo_atual = "modelo_avaliacao.docx"
 
+# --- PAINEL EXCLUSIVO DE VISUALIZAÇÃO EM TEMPO REAL NO CORPO DA TELA ---
 if st.session_state.resultado:
     st.write("---")
-    tags_map = {"{{PROFESSOR}}": prof, "{{COMPONENTE}}": comp, "{{TURMA}}": turma, "{{CORPO_PROVA}}": st.session_state.resultado, "{{TEXTO_RELATORIO}}": st.session_state.resultado}
+    st.subheader("🖥️ Tela da B.IA: Base de Dados Gemini em Tempo Real")
+    
+    # Caixa onde o professor vê e pode até mexer no texto gerado antes de baixar
+    texto_editado = st.text_area("Você pode revisar ou ajustar o texto abaixo diretamente:", value=st.session_state.resultado, height=350)
+    
+    tags_map = {"{{PROFESSOR}}": prof, "{{COMPONENTE}}": comp, "{{TURMA}}": turma, "{{CORPO_PROVA}}": texto_editado, "{{TEXTO_RELATORIO}}": texto_editado}
+    
     if st.session_state.modelo_atual == "modelo_anual.docx":
         def ext(tg, tx):
             m = re.search(rf"\[{tg}\](.*?)(?=\[\w+\]|$)", tx, re.DOTALL)
             return m.group(1).strip() if m else "Em branco."
-        tags_map.update({"{{COMPETENCIAS_GERAIS}}": ext("COMPETENCIAS_GERAIS", st.session_state.resultado), "{{COMPETENCIAS_ESPECIFICAS}}": ext("COMPETENCIAS_ESPECIFICAS", st.session_state.resultado), "{{CONCEITOS1}}": ext("CONCEITOS1", st.session_state.resultado), "{{OBJETO_CONHECIMENTO1}}": ext("OBJETO1", st.session_state.resultado), "{{HABILIDADES1}}": ext("HABILIDADES1", st.session_state.resultado), "{{CONCEITOS2}}": ext("CONCEITOS2", st.session_state.resultado), "{{OBJETO_CONHECIMENTO2}}": ext("OBJETO2", st.session_state.resultado), "{{HABILIDADES2}}": ext("HABILIDADES2", st.session_state.resultado), "{{CONCEITOS3}}": ext("CONCEITOS3", st.session_state.resultado), "{{OBJETO_CONHECIMENTO3}}": ext("OBJETO3", st.session_state.resultado), "{{HABILIDADES3}}": ext("HABILIDADES3", st.session_state.resultado), "{{INSTRUMENTOS}}": ext("INSTRUMENTOS", st.session_state.resultado), "{{REFERENCIAS}}": ext("REFERENCIAS", st.session_state.resultado)})
+        tags_map.update({"{{COMPETENCIAS_GERAIS}}": ext("COMPETENCIAS_GERAIS", texto_editado), "{{COMPETENCIAS_ESPECIFICAS}}": ext("COMPETENCIAS_ESPECIFICAS", texto_editado), "{{CONCEITOS1}}": ext("CONCEITOS1", texto_editado), "{{OBJETO_CONHECIMENTO1}}": ext("OBJETO1", texto_editado), "{{HABILIDADES1}}": ext("HABILIDADES1", texto_editado), "{{CONCEITOS2}}": ext("CONCEITOS2", texto_editado), "{{OBJETO_CONHECIMENTO2}}": ext("OBJETO2", texto_editado), "{{HABILIDADES2}}": ext("HABILIDADES2", texto_editado), "{{CONCEITOS3}}": ext("CONCEITOS3", texto_editado), "{{OBJETO_CONHECIMENTO3}}": ext("OBJETO3", texto_editado), "{{HABILIDADES3}}": ext("HABILIDADES3", texto_editado), "{{INSTRUMENTOS}}": ext("INSTRUMENTOS", texto_editado), "{{REFERENCIAS}}": ext("REFERENCIAS", texto_editado)})
     elif st.session_state.modelo_atual == "modelo_mensal.docx":
         def ext_m(tg, tx):
             m = re.search(rf"\[{tg}\](.*?)(?=\[\w+\]|$)", tx, re.DOTALL)
             return m.group(1).strip() if m else "Em branco."
-        tags_map.update({"{{AREA_CONHECIMENTO}}": ext_m("AREA", st.session_state.resultado), "{{HABILIDADES_MENSAL}}": ext_m("HABILIDADES", st.session_state.resultado), "{{OBJETO_MENSAL}}": ext_m("OBJETO", st.session_state.resultado), "{{CRITERIOS_MENSAL}}": ext_m("CRITERIOS", st.session_state.resultado), "{{METODOLOGIA_MENSAL}}": ext_m("METODOLOGIA", st.session_state.resultado), "{{INSTRUMENTOS_MENSAL}}": ext_m("INSTRUMENTOS", st.session_state.resultado), "{{DURACAO_MENSAL}}": st.session_state.get("duracao_input", "15 dias"), "{{REFERENCIAS_MENSAL}}": ext_m("REFERENCIAS", st.session_state.resultado)})
+        tags_map.update({"{{AREA_CONHECIMENTO}}": ext_m("AREA", texto_editado), "{{HABILIDADES_MENSAL}}": ext_m("HABILIDADES", texto_editado), "{{OBJETO_MENSAL}}": ext_m("OBJETO", texto_editado), "{{CRITERIOS_MENSAL}}": ext_m("CRITERIOS", texto_editado), "{{METODOLOGIA_MENSAL}}": ext_m("METODOLOGIA", texto_editado), "{{INSTRUMENTOS_MENSAL}}": ext_m("INSTRUMENTOS", texto_editado), "{{DURACAO_MENSAL}}": st.session_state.get("duracao_input", "15 dias"), "{{REFERENCIAS_MENSAL}}": ext_m("REFERENCIAS", texto_editado)})
+    
     w_bytes = preencher_word(st.session_state.modelo_atual, tags_map)
-    if w_bytes: st.download_button("📥 BAIXAR DOCUMENTO NO MODELO OFICIAL (.DOCX)", data=w_bytes, file_name=f"Documento_{comp}.docx", key="dl_f")
-    else: st.error("⚠️ Verifique os arquivos de modelo na pasta.")
-    st.subheader("📄 Conteúdo Gerado:")
-    st.markdown(st.session_state.resultado)
+    
+    if w_bytes: 
+        st.download_button("📥 BAIXAR DOCUMENTO NO MODELO OFICIAL (.DOCX)", data=w_bytes, file_name=f"Documento_{comp}.docx", key="dl_f")
+    else: 
+        st.error("⚠️ Verifique os arquivos de modelo na pasta.")

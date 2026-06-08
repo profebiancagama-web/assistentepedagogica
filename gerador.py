@@ -18,10 +18,12 @@ if "autenticado" not in st.session_state: st.session_state.autenticado = False
 if "client" not in st.session_state: st.session_state.client = genai.Client(api_key=MINHA_CHAVE)
 if "resultado" not in st.session_state: st.session_state.resultado = ""
 
-# --- CONFIGURAÇÃO DA MEMÓRIA DO CHAT ---
-if "historico_chat" not in st.session_state:
-    st.session_state.historico_chat = [
-        {"role": "model", "text": "Olá! Eu sou a B.IA, sua assistente pedagógica e companheira de trabalho. Sobre o que você gostaria de conversar ou planejar hoje? Estou pronta para ajudar em qualquer assunto!"}
+# ✨ INICIALIZAÇÃO CORRETA E NATIVA DO CHAT COM O GEMINI
+if "objeto_chat" not in st.session_state:
+    st.session_state.objeto_chat = st.session_state.client.chats.create(model="gemini-2.5-flash")
+if "mensagens_tela" not in st.session_state:
+    st.session_state.mensagens_tela = [
+        {"role": "assistant", "text": "Olá! Eu sou a B.IA, sua assistente pedagógica e companheira de trabalho. Sobre o que você gostaria de conversar ou planejar hoje? Estou pronta para ajudar em qualquer assunto!"}
     ]
 
 # --- TELA DE LOGIN ---
@@ -69,7 +71,7 @@ prof = st.text_input("Nome do(a) Professor(a):", value="")
 comp = st.text_input("Componente Curricular / Disciplina:")
 turma = st.text_input("Ano / Turma:")
 st.write("---")
-arqs = st.file_uploader("Arquivos de Referência (Até 3):", type=["pdf", "docx", "txt"], accept_multiple_files=True)
+arqs = st.file_uploader("Arquivos de Reference (Até 3):", type=["pdf", "docx", "txt"], accept_multiple_files=True)
 
 txt_ref = ""
 if arqs and len(arqs) <= 3:
@@ -171,35 +173,34 @@ with aba4:
             st.session_state.resultado = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=pt).text
             st.session_state.modelo_atual = "modelo_avaliacao.docx"
 
-# --- 💬 CONTEÚDO DA ABA: CHAT LIVRE COM A B.IA ---
+# --- 💬 ABA DE CHAT CORRIGIDA COM MÉTODO NATIVO (ANTI-ERRO) ---
 with aba_chat:
     st.subheader("💬 Sala de Conversa com a B.IA")
     st.caption("Fale sobre qualquer assunto, tire dúvidas ou peça conselhos pedagógicos à vontade!")
     
-    for msg in st.session_state.historico_chat:
-        with st.chat_message("user" if msg["role"] == "user" else "assistant"):
+    # Exibe as mensagens na tela
+    for msg in st.session_state.mensagens_tela:
+        with st.chat_message(msg["role"]):
             st.write(msg["text"])
             
+    # Entrada de texto do usuário
     if prompt := st.chat_input("Digite sua mensagem para a B.IA..."):
         with st.chat_message("user"):
             st.write(prompt)
-        st.session_state.historico_chat.append({"role": "user", "text": prompt})
+        st.session_state.mensagens_tela.append({"role": "user", "text": prompt})
         
         with st.spinner("B.IA está pensando..."):
-            conversa_formatada = []
-            for m in st.session_state.historico_chat:
-                role_val = "user" if m["role"] == "user" else "model"
-                conversa_formatada.append(types.Content(role=role_val, parts=[types.Part.from_text(text=m["text"])]))
-            
-            resposta_gemini = st.session_state.client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=conversa_formatada
-            ).text
-            
-            with st.chat_message("assistant"):
-                st.write(resposta_gemini)
-            st.session_state.historico_chat.append({"role": "model", "text": resposta_gemini})
-            st.rerun()
+            try:
+                # O objeto chat gerencia a conversa nativamente sem estourar a API
+                response = st.session_state.objeto_chat.send_message(prompt)
+                resposta_texto = response.text
+                
+                with st.chat_message("assistant"):
+                    st.write(resposta_texto)
+                st.session_state.mensagens_tela.append({"role": "assistant", "text": resposta_texto})
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro na comunicação com a IA: {e}")
 
 # --- PAINEL DE VISUALIZAÇÃO DE DOCUMENTOS (GERADOR) ---
 if st.session_state.resultado:

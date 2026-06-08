@@ -11,7 +11,8 @@ st.set_page_config(page_title="Gerador Olegário Pro", layout="wide")
 
 SUPABASE_URL = "https://hgdpahtyvoridomkktkt.supabase.co"
 SUPABASE_KEY = "sb_publishable_yxUHijFIrK7h2yznh8ySKw_4eBFxAlI"
-# 🔑 LEMBRETE: Cole sua chave do AI Studio (aquela que começa com AIzaSy) dentro das aspas abaixo:
+
+# 🔑 COLE A SUA CHAVE NOVA DO GOOGLE EXATAMENTE DENTRO DAS ASPAS ABAIXO:
 MINHA_CHAVE = "AQ.Ab8RN6LXEsq7OanSJP4TYH0xaQOD7y_NhTpKw2aSvanhp2hSNQ"
 
 if "supabase" not in st.session_state: st.session_state.supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -186,4 +187,58 @@ with aba4:
             try:
                 pt = f"Escreva um relatório do tipo {t_re} para {comp} ({turma}). Contexto: {ctx}. Use asteriscos duplos para marcar negritos."
                 st.session_state.resultado = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=pt).text
-                st.session_state.modelo_atual = "
+                st.session_state.modelo_atual = "modelo_avaliacao.docx"
+            except Exception as e:
+                st.error(f"Erro de Conexão com a Chave Gemini. Técnico: {e}")
+
+# --- 💬 ABA DE CHAT ---
+with aba_chat:
+    st.subheader("💬 Sala de Conversa com a B.IA")
+    st.caption("Fale sobre qualquer assunto, tire dúvidas ou peça conselhos pedagógicos à vontade!")
+    
+    for msg in st.session_state.mensagens_tela:
+        with st.chat_message(msg["role"]): st.write(msg["text"])
+            
+    if prompt := st.chat_input("Digite sua mensagem para a B.IA..."):
+        with st.chat_message("user"): st.write(prompt)
+        st.session_state.mensagens_tela.append({"role": "user", "text": prompt})
+        
+        with st.spinner("B.IA está pensando..."):
+            if st.session_state.objeto_chat is None:
+                try:
+                    st.session_state.objeto_chat = st.session_state.client.chats.create(model="gemini-2.5-flash")
+                except: pass
+                
+            if st.session_state.objeto_chat is not None:
+                try:
+                    response = st.session_state.objeto_chat.send_message(prompt)
+                    resposta_texto = response.text
+                    with st.chat_message("assistant"): st.write(resposta_texto)
+                    st.session_state.mensagens_tela.append({"role": "assistant", "text": resposta_texto})
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"⚠️ Erro na API: Verifique sua chave do Gemini. Técnico: {e}")
+            else:
+                st.error("⚠️ Não foi possível iniciar o chat. Certifique-se de que inseriu uma chave válida na linha 16.")
+
+# --- PAINEL DE VISUALIZAÇÃO DE DOCUMENTOS (GERADOR) ---
+if st.session_state.resultado:
+    st.write("---")
+    st.subheader("🖥️ Tela da B.IA: Base de Dados Gemini em Tempo Real")
+    texto_editado = st.text_area("Você pode revisar ou ajustar o texto abaixo diretamente:", value=st.session_state.resultado, height=350)
+    tags_map = {"{{PROFESSOR}}": prof, "{{COMPONENTE}}": comp, "{{TURMA}}": turma, "{{CORPO_PROVA}}": texto_editado, "{{TEXTO_RELATORIO}}": texto_editado}
+    
+    if st.session_state.modelo_atual == "modelo_anual.docx":
+        def ext(tg, tx):
+            m = re.search(rf"\[{tg}\](.*?)(?=\[\w+\]|$)", tx, re.DOTALL)
+            return m.group(1).strip() if m else "Em branco."
+        tags_map.update({"{{COMPETENCIAS_GERAIS}}": ext("COMPETENCIAS_GERAIS", texto_editado), "{{COMPETENCIAS_ESPECIFICAS}}": ext("COMPETENCIAS_ESPECIFICAS", texto_editado), "{{CONCEITOS1}}": ext("CONCEITOS1", texto_editado), "{{OBJETO_CONHECIMENTO1}}": ext("OBJETO1", texto_editado), "{{HABILIDADES1}}": ext("HABILIDADES1", texto_editado), "{{CONCEITOS2}}": ext("CONCEITOS2", texto_editado), "{{OBJETO_CONHECIMENTO2}}": ext("OBJETO2", texto_editado), "{{HABILIDADES2}}": ext("HABILIDADES2", texto_editado), "{{CONCEITOS3}}": ext("CONCEITOS3", texto_editado), "{{OBJETO_CONHECIMENTO3}}": ext("OBJETO3", texto_editado), "{{HABILIDADES3}}": ext("HABILIDADES3", texto_editado), "{{INSTRUMENTOS}}": ext("INSTRUMENTOS", texto_editado), "{{REFERENCIAS}}": ext("REFERENCIAS", texto_editado)})
+    elif st.session_state.modelo_atual == "modelo_mensal.docx":
+        def ext_m(tg, tx):
+            m = re.search(rf"\[{tg}\](.*?)(?=\[\w+\]|$)", tx, re.DOTALL)
+            return m.group(1).strip() if m else "Em branco."
+        tags_map.update({"{{AREA_CONHECIMENTO}}": ext_m("AREA", texto_editado), "{{HABILIDADES_MENSAL}}": ext_m("HABILIDADES", texto_editado), "{{OBJETO_MENSAL}}": ext_m("OBJETO", texto_editado), "{{CRITERIOS_MENSAL}}": ext_m("CRITERIOS", texto_editado), "{{METODOLOGIA_MENSAL}}": ext_m("METODOLOGIA", texto_editado), "{{INSTRUMENTOS_MENSAL}}": ext_m("INSTRUMENTOS", texto_editado), "{{DURACAO_MENSAL}}": st.session_state.get("duracao_input", "15 dias"), "{{REFERENCIAS_MENSAL}}": ext_m("REFERENCIAS", texto_editado)})
+    
+    w_bytes = preencher_word(st.session_state.modelo_atual, tags_map)
+    if w_bytes: st.download_button("📥 BAIXAR DOCUMENTO NO MODELO OFICIAL (.DOCX)", data=w_bytes, file_name=f"Documento_{comp}.docx", key="dl_f")
+    else: st.error("⚠️ Verifique os arquivos de modelo na pasta.")

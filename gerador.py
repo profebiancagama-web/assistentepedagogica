@@ -95,9 +95,9 @@ def aplicar_formatacao_inteligente(paragrafo, texto_com_tags):
                 run.bold = True
         elif parte:
             run = paragrafo.add_run(parte)
-        try:
-            for r in paragrafo.runs: r.font.name, r.font.size, r.font.color.rgb = 'Arial', Pt(12), RGBColor(0,0,0)
-        except: pass
+    try:
+        for r in paragrafo.runs: r.font.name, r.font.size, r.font.color.rgb = 'Arial', Pt(12), RGBColor(0,0,0)
+    except: pass
 
 def preencher_word(nome_modelo, dados_tags):
     if not os.path.exists(nome_modelo): return None
@@ -171,7 +171,7 @@ with aba4:
             st.session_state.resultado = st.session_state.client.models.generate_content(model='gemini-2.5-flash', contents=pt).text
             st.session_state.modelo_atual = "modelo_avaliacao.docx"
 
-# --- 💬 CONTEÚDO DA ABA: CHAT LIVRE COM A B.IA CORRIGIDO ---
+# --- 💬 CONTEÚDO DA ABA: CHAT LIVRE COM A B.IA ---
 with aba_chat:
     st.subheader("💬 Sala de Conversa com a B.IA")
     st.caption("Fale sobre qualquer assunto, tire dúvidas ou peça conselhos pedagógicos à vontade!")
@@ -186,7 +186,6 @@ with aba_chat:
         st.session_state.historico_chat.append({"role": "user", "text": prompt})
         
         with st.spinner("B.IA está pensando..."):
-            # Converte o histórico de forma simples e limpa para enviar ao Gemini
             conversa_formatada = []
             for m in st.session_state.historico_chat:
                 role_val = "user" if m["role"] == "user" else "model"
@@ -222,4 +221,4 @@ if st.session_state.resultado:
     
     w_bytes = preencher_word(st.session_state.modelo_atual, tags_map)
     if w_bytes: st.download_button("📥 BAIXAR DOCUMENTO NO MODELO OFICIAL (.DOCX)", data=w_bytes, file_name=f"Documento_{comp}.docx", key="dl_f")
-    else: st.
+    else: st.error("⚠️ Verifique os arquivos de modelo na pasta.")
